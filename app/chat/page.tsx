@@ -10,6 +10,7 @@ import { Send, LogOut, Mic, MicOff, AlertCircle, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AutoPartsLogo } from "@/components/auto-parts-logo-apple";
+import { AudioWave } from "@/components/audio-wave";
 
 export default function ChatPage() {
   const router = useRouter();
@@ -260,7 +261,9 @@ export default function ChatPage() {
         );
       audioRecorderNodeRef.current = recorderNode;
       audioRecorderContextRef.current = recorderCtx;
-      micStreamRef.current = stream;
+      if (stream instanceof MediaStream) {
+        micStreamRef.current = stream;
+      }
 
       // Set is_audio to true and reconnect
       isAudioRef.current = true;
@@ -486,6 +489,14 @@ export default function ChatPage() {
               </div>
             </div>
           ))}
+
+          {/* Audio wave visualization */}
+          {isRecording && (
+            <AudioWave
+              isRecording={isRecording}
+              micStream={micStreamRef.current}
+            />
+          )}
 
           <div ref={messagesEndRef} />
         </div>

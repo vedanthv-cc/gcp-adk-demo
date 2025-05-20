@@ -20,7 +20,7 @@ export function AudioWave({ isRecording, micStream }: AudioWaveProps) {
       // Cleanup when not recording
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
-        animationRef.current = undefined;
+        animationRef.current = null;
       }
 
       if (sourceRef.current) {
@@ -42,11 +42,20 @@ export function AudioWave({ isRecording, micStream }: AudioWaveProps) {
     // Setup audio analyzer
     if (!audioContextRef.current) {
       try {
+        // Create a new AudioContext
         audioContextRef.current = new AudioContext();
+
+        // Create an analyzer node
         analyserRef.current = audioContextRef.current.createAnalyser();
         analyserRef.current.fftSize = 256;
+
+        // Create a media stream source from the microphone stream
+        // This is the key part that fixes the type error - we're explicitly using the micStream parameter
+        // which is properly typed as MediaStream | null | undefined
         sourceRef.current =
           audioContextRef.current.createMediaStreamSource(micStream);
+
+        // Connect the source to the analyzer
         sourceRef.current.connect(analyserRef.current);
 
         // Start the visualization

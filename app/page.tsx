@@ -134,9 +134,6 @@ export default function LoginPage() {
                     required
                     className="apple-input"
                   />
-                  <p className="text-xs text-gray-500">
-                    Use password: "customer"
-                  </p>
                 </div>
                 {error && <p className="text-sm text-red-500">{error}</p>}
               </CardContent>
@@ -185,7 +182,6 @@ export default function LoginPage() {
                     required
                     className="apple-input"
                   />
-                  <p className="text-xs text-gray-500">Use password: "admin"</p>
                 </div>
                 {error && <p className="text-sm text-red-500">{error}</p>}
               </CardContent>
