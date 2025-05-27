@@ -9,7 +9,7 @@ interface AudioWaveProps {
 
 export function AudioWave({ isRecording, micStream }: AudioWaveProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animationRef = useRef<number | null>(null);
+  const animationRef = useRef<number>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
@@ -20,7 +20,7 @@ export function AudioWave({ isRecording, micStream }: AudioWaveProps) {
       // Cleanup when not recording
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
-        animationRef.current = null;
+        animationRef.current = undefined;
       }
 
       if (sourceRef.current) {
@@ -103,7 +103,7 @@ export function AudioWave({ isRecording, micStream }: AudioWaveProps) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       // Set background
-      ctx.fillStyle = "rgba(255, 255, 255, 0.05)";
+      ctx.fillStyle = "rgba(0, 77, 46, 0.1)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Calculate bar width
@@ -122,9 +122,9 @@ export function AudioWave({ isRecording, micStream }: AudioWaveProps) {
           0,
           canvas.height
         );
-        gradient.addColorStop(0, "#0071e3"); // Blue at top
-        gradient.addColorStop(0.6, "#60a5fa"); // Light blue in middle
-        gradient.addColorStop(1, "rgba(96, 165, 250, 0.5)"); // Transparent at bottom
+        gradient.addColorStop(0, "#ffffff"); // White at top
+        gradient.addColorStop(0.6, "rgba(255, 255, 255, 0.7)"); // Semi-transparent white in middle
+        gradient.addColorStop(1, "rgba(255, 255, 255, 0.3)"); // More transparent at bottom
 
         ctx.fillStyle = gradient;
 
@@ -149,13 +149,6 @@ export function AudioWave({ isRecording, micStream }: AudioWaveProps) {
 
         x += barWidth;
       }
-
-      // Add a reflection effect
-      ctx.globalAlpha = 0.2;
-      ctx.scale(1, -0.2);
-      ctx.drawImage(canvas, 0, -canvas.height * 5);
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.globalAlpha = 1.0;
     };
 
     draw();
@@ -166,7 +159,7 @@ export function AudioWave({ isRecording, micStream }: AudioWaveProps) {
   }
 
   return (
-    <div className="w-full h-20 mb-4 rounded-lg overflow-hidden bg-gray-50 shadow-inner">
+    <div className="w-full h-16 mb-4 rounded-lg overflow-hidden bg-[#005d38] shadow-inner">
       <canvas
         ref={canvasRef}
         className="w-full h-full"

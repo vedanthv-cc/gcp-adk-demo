@@ -6,11 +6,22 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, LogOut, Mic, MicOff, AlertCircle, Loader2 } from "lucide-react";
+import {
+  Send,
+  LogOut,
+  Mic,
+  MicOff,
+  AlertCircle,
+  Loader2,
+  Video,
+  Monitor,
+} from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AutoPartsLogo } from "@/components/auto-parts-logo-apple";
 import { AudioWave } from "@/components/audio-wave";
+import { VideoControls } from "@/components/video-controls";
+import { WebSocketService } from "@/lib/websocket-service";
 
 export default function ChatPage() {
   const router = useRouter();
@@ -18,24 +29,15 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<any[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [isRecording, setIsRecording] = useState(false);
+  const [isVideoActive, setIsVideoActive] = useState(false);
+  const [isScreenShareActive, setIsScreenShareActive] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<
     "connecting" | "connected" | "disconnected" | "failed" | "recording"
   >("disconnected");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // WebSocket and audio refs
-  const websocketRef = useRef<WebSocket | null>(null);
-  const sessionIdRef = useRef<string>(
-    Math.random().toString().substring(2, 10)
-  );
-  const currentMessageIdRef = useRef<string | null>(null);
-  const isAudioRef = useRef<boolean>(false);
-
-  // Audio components
-  const audioPlayerNodeRef = useRef<any>(null);
-  const audioPlayerContextRef = useRef<any>(null);
-  const audioRecorderNodeRef = useRef<any>(null);
-  const audioRecorderContextRef = useRef<any>(null);
+  // WebSocket service
+  const websocketServiceRef = useRef<WebSocketService>(new WebSocketService());
   const micStreamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
@@ -55,14 +57,12 @@ export default function ChatPage() {
     setUser(parsedUser);
 
     // Connect WebSocket
-    connectWebsocket();
+    const websocketService = websocketServiceRef.current;
+    websocketService.connect(handleWebSocketMessage);
 
     return () => {
-      // Clean up WebSocket and audio on unmount
-      if (websocketRef.current) {
-        websocketRef.current.close();
-      }
-      stopAudio();
+      // Clean up WebSocket and media on unmount
+      websocketService.disconnect();
     };
   }, [router]);
 
@@ -70,102 +70,38 @@ export default function ChatPage() {
     scrollToBottom();
   }, [messages]);
 
-  // Connect to WebSocket
-  const connectWebsocket = () => {
-    setConnectionStatus("connecting");
-
-    // Create WebSocket URL with the format ws://localhost:8000/ws/12345?is_audio=false
-    const wsUrl = `ws://localhost:8000/ws/${sessionIdRef.current}?is_audio=${isAudioRef.current}`;
-
-    // Connect websocket
-    const ws = new WebSocket(wsUrl);
-    websocketRef.current = ws;
-
-    // Handle connection open
-    ws.onopen = () => {
-      console.log(
-        "WebSocket connection opened with is_audio=" + isAudioRef.current
-      );
-      setConnectionStatus(isAudioRef.current ? "recording" : "connected");
-    };
-
-    // Handle incoming messages
-    ws.onmessage = (event) => {
-      try {
-        // Parse the incoming message
-        const messageFromServer = JSON.parse(event.data);
-        console.log("[AGENT TO CLIENT] ", messageFromServer);
-
-        // Check if the turn is complete
-        if (
-          messageFromServer.turn_complete &&
-          messageFromServer.turn_complete === true
-        ) {
-          currentMessageIdRef.current = null;
-          return;
-        }
-
-        // If it's audio, play it
-        if (
-          messageFromServer.mime_type === "audio/pcm" &&
-          audioPlayerNodeRef.current
-        ) {
-          audioPlayerNodeRef.current.port.postMessage(
-            base64ToArray(messageFromServer.data)
-          );
-        }
-
-        // If it's text, display it
-        if (messageFromServer.mime_type === "text/plain") {
-          // For a new message, generate a new ID
-          if (currentMessageIdRef.current === null) {
-            currentMessageIdRef.current = Math.random()
-              .toString(36)
-              .substring(7);
-
-            // Create a new message
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: currentMessageIdRef.current,
-                sender: "agent",
-                content: messageFromServer.data,
-                timestamp: new Date().toISOString(),
-              },
-            ]);
-          } else {
-            // For continuing messages, update the existing message
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === currentMessageIdRef.current
-                  ? { ...msg, content: msg.content + messageFromServer.data }
-                  : msg
-              )
-            );
-          }
-        }
-      } catch (error) {
-        console.error("Error processing WebSocket message:", error);
+  const handleWebSocketMessage = (message: any) => {
+    // Handle system messages
+    if (message.system) {
+      if (message.status) {
+        setConnectionStatus(
+          message.status === "recording" ? "recording" : message.status
+        );
       }
-    };
+      return;
+    }
 
-    // Handle connection close
-    ws.onclose = () => {
-      console.log("WebSocket connection closed");
-      setConnectionStatus("disconnected");
-
-      // Automatically reconnect after a delay
-      setTimeout(() => {
-        console.log("Reconnecting...");
-        connectWebsocket();
-      }, 5000);
-    };
-
-    // Handle connection errors
-    ws.onerror = (e) => {
-      console.log("WebSocket error: ", e);
-      setConnectionStatus("failed");
-    };
+    // Handle new messages
+    if (message.new_message) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: message.id,
+          sender: "agent",
+          content: message.data,
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+    } else {
+      // Update existing message
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === message.id
+            ? { ...msg, content: msg.content + message.data }
+            : msg
+        )
+      );
+    }
   };
 
   const scrollToBottom = () => {
@@ -174,15 +110,12 @@ export default function ChatPage() {
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (
-      !inputMessage.trim() ||
-      !websocketRef.current ||
-      websocketRef.current.readyState !== WebSocket.OPEN
-    )
-      return;
+    if (!inputMessage.trim()) return;
+
+    const websocketService = websocketServiceRef.current;
 
     // Send message via WebSocket
-    sendMessage({
+    websocketService.sendMessage({
       mime_type: "text/plain",
       data: inputMessage,
     });
@@ -206,133 +139,61 @@ export default function ChatPage() {
   };
 
   const handleLogout = () => {
-    if (websocketRef.current) {
-      websocketRef.current.close();
-    }
-    stopAudio();
+    const websocketService = websocketServiceRef.current;
+    websocketService.disconnect();
     localStorage.removeItem("user");
     router.push("/");
   };
 
-  // Send a message to the server as a JSON string
-  const sendMessage = (message: any) => {
-    if (
-      websocketRef.current &&
-      websocketRef.current.readyState === WebSocket.OPEN
-    ) {
-      const messageJson = JSON.stringify(message);
-      websocketRef.current.send(messageJson);
-      console.log("[CLIENT TO AGENT]", message);
-    }
-  };
-
   // Toggle audio recording
   const toggleRecording = async () => {
+    const websocketService = websocketServiceRef.current;
+
     if (isRecording) {
-      stopAudio();
+      websocketService.stopAudio();
+      setIsRecording(false);
+      setConnectionStatus("connected");
       return;
     }
 
     try {
-      await startAudio();
+      await websocketService.startAudio();
       setIsRecording(true);
+      setConnectionStatus("recording");
+      // Store the mic stream for visualization
+      if (websocketService["micStream"]) {
+        micStreamRef.current = websocketService["micStream"];
+      }
     } catch (error) {
       console.error("Failed to start audio:", error);
     }
   };
 
-  // Start audio recording and playback
-  const startAudio = async () => {
-    try {
-      // Start audio output
-      const audioPlayerModule = await import("../../public/audio-player.js");
-      const [playerNode, playerCtx] =
-        await audioPlayerModule.startAudioPlayerWorklet();
-      audioPlayerNodeRef.current = playerNode;
-      audioPlayerContextRef.current = playerCtx;
-
-      // Start audio input
-      const audioRecorderModule = await import(
-        "../../public/audio-recorder.js"
-      );
-      const [recorderNode, recorderCtx, stream] =
-        await audioRecorderModule.startAudioRecorderWorklet(
-          audioRecorderHandler
-        );
-      audioRecorderNodeRef.current = recorderNode;
-      audioRecorderContextRef.current = recorderCtx;
-      if (stream instanceof MediaStream) {
-        micStreamRef.current = stream;
-      }
-
-      // Set is_audio to true and reconnect
-      isAudioRef.current = true;
-
-      // Close existing WebSocket
-      if (websocketRef.current) {
-        websocketRef.current.close();
-      }
-
-      // Connect with audio mode
-      connectWebsocket();
-
-      return true;
-    } catch (error) {
-      console.error("Error starting audio:", error);
-      throw error;
-    }
+  // Handle video controls
+  const handleStartWebcam = async (videoElement: HTMLVideoElement) => {
+    const websocketService = websocketServiceRef.current;
+    const success = await websocketService.startVideo(videoElement);
+    setIsVideoActive(success);
+    return success;
   };
 
-  // Stop audio recording
-  const stopAudio = () => {
-    if (micStreamRef.current) {
-      micStreamRef.current.getTracks().forEach((track) => track.stop());
-      micStreamRef.current = null;
-    }
-
-    // Set is_audio to false and reconnect
-    isAudioRef.current = false;
-
-    // Only reconnect if we're currently recording
-    if (isRecording) {
-      if (websocketRef.current) {
-        websocketRef.current.close();
-      }
-      connectWebsocket();
-      setIsRecording(false);
-    }
+  const handleStartScreenShare = async (videoElement: HTMLVideoElement) => {
+    const websocketService = websocketServiceRef.current;
+    const success = await websocketService.startScreenShare(videoElement);
+    setIsScreenShareActive(success);
+    return success;
   };
 
-  // Audio recorder handler
-  const audioRecorderHandler = (pcmData: ArrayBuffer) => {
-    // Send the pcm data as base64
-    sendMessage({
-      mime_type: "audio/pcm",
-      data: arrayBufferToBase64(pcmData),
-    });
-    console.log("[CLIENT TO AGENT] sent %s bytes", pcmData.byteLength);
+  const handleSwitchCamera = async () => {
+    const websocketService = websocketServiceRef.current;
+    return await websocketService.switchCamera();
   };
 
-  // Encode an array buffer with Base64
-  const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
-    let binary = "";
-    const bytes = new Uint8Array(buffer);
-    const len = bytes.byteLength;
-    for (let i = 0; i < len; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    return window.btoa(binary);
-  };
-
-  // Decode Base64 data to Array
-  const base64ToArray = (base64: string): ArrayBuffer => {
-    const binaryString = window.atob(base64);
-    const len = binaryString.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes.buffer;
+  const handleStopVideo = () => {
+    const websocketService = websocketServiceRef.current;
+    websocketService.stopVideo();
+    setIsVideoActive(false);
+    setIsScreenShareActive(false);
   };
 
   if (!user) return null;
@@ -407,13 +268,57 @@ export default function ChatPage() {
               Could not connect to the support server.
               <Button
                 variant="link"
-                onClick={connectWebsocket}
+                onClick={() =>
+                  websocketServiceRef.current.connect(handleWebSocketMessage)
+                }
                 className="p-0 h-auto font-normal text-blue-600"
               >
                 Try again
               </Button>
             </AlertDescription>
           </Alert>
+        )}
+
+        {/* Video display area - only show when video is active */}
+        {(isVideoActive || isScreenShareActive) && (
+          <div className="mb-4 apple-card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                {isVideoActive ? (
+                  <>
+                    <Video className="h-4 w-4" />
+                    Camera Active
+                  </>
+                ) : (
+                  <>
+                    <Monitor className="h-4 w-4" />
+                    Screen Share Active
+                  </>
+                )}
+              </h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleStopVideo}
+                className="text-red-500 hover:text-red-700 hover:bg-red-50"
+              >
+                Stop Video
+              </Button>
+            </div>
+            <div
+              className="relative bg-black rounded-lg overflow-hidden"
+              style={{ aspectRatio: "16/9", maxHeight: "300px" }}
+            >
+              <VideoControls
+                onStartWebcam={handleStartWebcam}
+                onStartScreenShare={handleStartScreenShare}
+                onSwitchCamera={handleSwitchCamera}
+                onStopVideo={handleStopVideo}
+                isVideoActive={isVideoActive}
+                isScreenShareActive={isScreenShareActive}
+              />
+            </div>
+          </div>
         )}
 
         {/* Messages */}
@@ -504,6 +409,7 @@ export default function ChatPage() {
         {/* Input area */}
         <div className="apple-card p-4">
           <form onSubmit={handleSendMessage} className="flex space-x-2">
+            {/* Audio control */}
             <Button
               type="button"
               variant={isRecording ? "destructive" : "outline"}
@@ -515,6 +421,7 @@ export default function ChatPage() {
                   ? "bg-red-500 text-white"
                   : "bg-gray-100 text-gray-700"
               }
+              title={isRecording ? "Stop Recording" : "Start Recording"}
             >
               {isRecording ? (
                 <MicOff className="h-5 w-5" />
@@ -522,6 +429,41 @@ export default function ChatPage() {
                 <Mic className="h-5 w-5" />
               )}
             </Button>
+
+            {/* Video controls - only show when not active */}
+            {!isVideoActive && !isScreenShareActive && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => {
+                    const videoEl = document.createElement("video");
+                    handleStartWebcam(videoEl);
+                  }}
+                  disabled={connectionStatus !== "connected"}
+                  className="bg-gray-100 text-gray-700"
+                  title="Start Camera"
+                >
+                  <Video className="h-5 w-5" />
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => {
+                    const videoEl = document.createElement("video");
+                    handleStartScreenShare(videoEl);
+                  }}
+                  disabled={connectionStatus !== "connected"}
+                  className="bg-gray-100 text-gray-700"
+                  title="Start Screen Share"
+                >
+                  <Monitor className="h-5 w-5" />
+                </Button>
+              </>
+            )}
 
             <Input
               value={inputMessage}
@@ -531,7 +473,7 @@ export default function ChatPage() {
                 connectionStatus !== "connected" &&
                 connectionStatus !== "recording"
               }
-              className="apple-input"
+              className="apple-input flex-1"
             />
             <Button
               type="submit"

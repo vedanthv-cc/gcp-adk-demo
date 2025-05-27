@@ -74,16 +74,14 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center p-4 apple-gradient">
+    <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-[#f5f5f7]">
       <div className="mb-8 flex items-center space-x-3">
         <AutoPartsLogo />
-        <h1 className="text-2xl font-semibold text-gray-900">
-          CC Auto Parts Support
-        </h1>
+        <h1 className="text-2xl font-semibold text-gray-900">CC Auto Parts</h1>
       </div>
 
       <Tabs defaultValue="customer" className="w-full max-w-md">
-        <TabsList className="grid w-full grid-cols-2 mb-6 bg-[#f1f1f3] p-1 rounded-xl">
+        <TabsList className="grid w-full grid-cols-2 mb-6 bg-gray-100 p-1 rounded-xl">
           <TabsTrigger
             value="customer"
             className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm"
@@ -99,7 +97,7 @@ export default function LoginPage() {
         </TabsList>
 
         <TabsContent value="customer">
-          <Card className="apple-card border-none">
+          <Card className="border-none shadow-sm bg-white/80 backdrop-blur-md">
             <CardHeader>
               <CardTitle className="text-gray-900">Customer Login</CardTitle>
               <CardDescription className="text-gray-500">
@@ -118,7 +116,7 @@ export default function LoginPage() {
                     value={customerUsername}
                     onChange={(e) => setCustomerUsername(e.target.value)}
                     required
-                    className="apple-input"
+                    className="bg-gray-50 border-gray-200 focus-visible:ring-gray-300"
                   />
                 </div>
                 <div className="space-y-2">
@@ -132,7 +130,7 @@ export default function LoginPage() {
                     value={customerPassword}
                     onChange={(e) => setCustomerPassword(e.target.value)}
                     required
-                    className="apple-input"
+                    className="bg-gray-50 border-gray-200 focus-visible:ring-gray-300"
                   />
                   <p className="text-xs text-gray-500">
                     Use password: "customer"
@@ -141,7 +139,10 @@ export default function LoginPage() {
                 {error && <p className="text-sm text-red-500">{error}</p>}
               </CardContent>
               <CardFooter>
-                <Button type="submit" className="w-full apple-button">
+                <Button
+                  type="submit"
+                  className="w-full bg-gray-900 hover:bg-gray-800 text-white"
+                >
                   Sign In
                 </Button>
               </CardFooter>
@@ -150,7 +151,7 @@ export default function LoginPage() {
         </TabsContent>
 
         <TabsContent value="admin">
-          <Card className="apple-card border-none">
+          <Card className="border-none shadow-sm bg-white/80 backdrop-blur-md">
             <CardHeader>
               <CardTitle className="text-gray-900">Admin Login</CardTitle>
               <CardDescription className="text-gray-500">
@@ -169,7 +170,7 @@ export default function LoginPage() {
                     value={adminUsername}
                     onChange={(e) => setAdminUsername(e.target.value)}
                     required
-                    className="apple-input"
+                    className="bg-gray-50 border-gray-200 focus-visible:ring-gray-300"
                   />
                 </div>
                 <div className="space-y-2">
@@ -183,14 +184,17 @@ export default function LoginPage() {
                     value={adminPassword}
                     onChange={(e) => setAdminPassword(e.target.value)}
                     required
-                    className="apple-input"
+                    className="bg-gray-50 border-gray-200 focus-visible:ring-gray-300"
                   />
                   <p className="text-xs text-gray-500">Use password: "admin"</p>
                 </div>
                 {error && <p className="text-sm text-red-500">{error}</p>}
               </CardContent>
               <CardFooter>
-                <Button type="submit" className="w-full apple-button">
+                <Button
+                  type="submit"
+                  className="w-full bg-gray-900 hover:bg-gray-800 text-white"
+                >
                   Sign In
                 </Button>
               </CardFooter>

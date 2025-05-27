@@ -1,11 +1,8 @@
-/**
- * WebSocket Service for handling chat and audio communication
- */
-
 export class WebSocketService {
   private websocket: WebSocket | null = null;
   private sessionId: string;
   private isAudio = false;
+  private isVideo = false;
   private currentMessageId: string | null = null;
   private messageHandler: ((message: any) => void) | null = null;
   private reconnectAttempts = 0;
@@ -24,6 +21,13 @@ export class WebSocketService {
   private audioRecorderNode: any = null;
   private audioRecorderContext: any = null;
   private micStream: MediaStream | null = null;
+
+  // Video components
+  private videoStream: MediaStream | null = null;
+  private videoElement: HTMLVideoElement | null = null;
+  private canvas: HTMLCanvasElement | null = null;
+  private ctx: CanvasRenderingContext2D | null = null;
+  private videoInterval: NodeJS.Timeout | null = null;
 
   constructor() {
     this.sessionId = Math.random().toString().substring(2, 10);
@@ -313,6 +317,15 @@ export class WebSocketService {
                   data: randomResponse,
                   new_message: true,
                 });
+              } else if (parsedData.mime_type === "image/jpeg") {
+                // Simulate response to image
+                const responseId = Math.random().toString(36).substring(7);
+                messageHandler({
+                  id: responseId,
+                  mime_type: "text/plain",
+                  data: "I can see your image. It looks like a car part. Let me analyze it for you.",
+                  new_message: true,
+                });
               }
             } catch (error) {
               console.error("Error processing simulated message:", error);
@@ -345,6 +358,7 @@ export class WebSocketService {
     }
 
     this.stopAudio();
+    this.stopVideo();
     this.connectionStatus = "disconnected";
   }
 
@@ -435,6 +449,222 @@ export class WebSocketService {
     this.isAudio = false;
   }
 
+  // Start video streaming - following the reference implementation
+  async startVideo(videoElement: HTMLVideoElement) {
+    try {
+      if (this.isVideo) return true;
+
+      // Get user media for video
+      this.videoStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 },
+        },
+      });
+      this.videoElement = videoElement;
+      this.videoElement.srcObject = this.videoStream;
+
+      // Ensure video plays
+      await this.videoElement.play();
+
+      // Create canvas for frame capture
+      this.canvas = document.createElement("canvas");
+      this.ctx = this.canvas.getContext("2d");
+
+      // Set video flag
+      this.isVideo = true;
+
+      // Start capturing and sending frames at 1fps (like the reference)
+      this.videoInterval = setInterval(() => {
+        this.captureAndSendFrame();
+      }, 1000);
+
+      console.log("Video started");
+      return true;
+    } catch (error) {
+      console.error("Error starting video:", error);
+      if (this.messageHandler) {
+        this.messageHandler({
+          mime_type: "text/plain",
+          data: "Could not access camera. Please check your permissions.",
+          system: true,
+          status: "error",
+        });
+      }
+      throw error;
+    }
+  }
+
+  // Start screen sharing
+  async startScreenShare(videoElement: HTMLVideoElement) {
+    try {
+      if (this.isVideo) return true;
+
+      // Get display media for screen sharing
+      this.videoStream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 15 },
+        },
+      });
+      this.videoElement = videoElement;
+      this.videoElement.srcObject = this.videoStream;
+
+      // Ensure video plays
+      await this.videoElement.play();
+
+      // Create canvas for frame capture
+      this.canvas = document.createElement("canvas");
+      this.ctx = this.canvas.getContext("2d");
+
+      // Set video flag
+      this.isVideo = true;
+
+      // Handle when user stops sharing via browser controls
+      this.videoStream.getVideoTracks()[0].addEventListener("ended", () => {
+        this.stopVideo();
+      });
+
+      // Start capturing and sending frames at 1fps
+      this.videoInterval = setInterval(() => {
+        this.captureAndSendFrame();
+      }, 1000);
+
+      console.log("Screen sharing started");
+      return true;
+    } catch (error) {
+      console.error("Error starting screen share:", error);
+      if (this.messageHandler) {
+        this.messageHandler({
+          mime_type: "text/plain",
+          data: "Could not share screen. Please try again.",
+          system: true,
+          status: "error",
+        });
+      }
+      throw error;
+    }
+  }
+
+  // Switch camera (front/back) - simplified version
+  async switchCamera() {
+    try {
+      if (!this.isVideo || !this.videoElement) return false;
+
+      // Stop current video
+      if (this.videoStream) {
+        this.videoStream.getTracks().forEach((track) => track.stop());
+      }
+
+      // Try to get the opposite camera
+      const currentFacingMode = this.videoStream
+        ?.getVideoTracks()[0]
+        ?.getSettings()?.facingMode;
+      const newFacingMode =
+        currentFacingMode === "user" ? "environment" : "user";
+
+      this.videoStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: newFacingMode },
+      });
+
+      this.videoElement.srcObject = this.videoStream;
+      this.videoElement.play();
+
+      return true;
+    } catch (error) {
+      console.error("Error switching camera:", error);
+      // Fallback to any available camera
+      try {
+        this.videoStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+        });
+        if (this.videoElement) {
+          this.videoElement.srcObject = this.videoStream;
+          this.videoElement.play();
+        }
+        return true;
+      } catch (fallbackError) {
+        console.error("Fallback camera failed:", fallbackError);
+        return false;
+      }
+    }
+  }
+
+  // Stop video streaming
+  stopVideo() {
+    if (this.videoInterval) {
+      clearInterval(this.videoInterval);
+      this.videoInterval = null;
+    }
+
+    if (this.videoStream) {
+      this.videoStream.getTracks().forEach((track) => track.stop());
+      this.videoStream = null;
+    }
+
+    if (this.videoElement) {
+      this.videoElement.srcObject = null;
+    }
+
+    this.isVideo = false;
+    console.log("Video stopped");
+  }
+
+  // Capture and send video frame - following the reference implementation
+  private captureAndSendFrame() {
+    if (
+      !this.videoElement ||
+      !this.canvas ||
+      !this.ctx ||
+      this.videoElement.readyState < 2
+    ) {
+      return;
+    }
+
+    try {
+      // Set canvas size to match video
+      this.canvas.width = this.videoElement.videoWidth;
+      this.canvas.height = this.videoElement.videoHeight;
+
+      // Draw current video frame to canvas
+      this.ctx.drawImage(
+        this.videoElement,
+        0,
+        0,
+        this.canvas.width,
+        this.canvas.height
+      );
+
+      // Convert canvas to blob and send as base64
+      this.canvas.toBlob(
+        (blob) => {
+          if (!blob) return;
+
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const result = reader.result as string;
+            const base64data = result.split(",")[1]; // Remove data:image/jpeg;base64, prefix
+
+            // Send the frame via WebSocket
+            this.sendMessage({
+              mime_type: "image/jpeg",
+              data: base64data,
+            });
+
+            console.log("[CLIENT TO AGENT] sent image/jpeg frame");
+          };
+          reader.readAsDataURL(blob);
+        },
+        "image/jpeg",
+        0.8 // JPEG quality
+      );
+    } catch (error) {
+      console.error("Error capturing video frame:", error);
+    }
+  }
+
   // Audio recorder handler
   private audioRecorderHandler(pcmData: ArrayBuffer) {
     // Send the pcm data as base64
@@ -458,12 +688,34 @@ export class WebSocketService {
 
   // Decode Base64 data to Array
   private base64ToArray(base64: string): ArrayBuffer {
-    const binaryString = window.atob(base64);
-    const len = binaryString.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
+    try {
+      // Safety check - limit the size of base64 strings we process
+      if (base64.length > 500000) {
+        // ~375KB after decoding
+        console.warn(
+          "Base64 string too large, truncating to prevent memory issues"
+        );
+        base64 = base64.substring(0, 500000);
+      }
+
+      const binaryString = window.atob(base64);
+      const len = binaryString.length;
+
+      // Another safety check on decoded length
+      if (len > 1000000) {
+        // ~1MB limit
+        console.error("Decoded binary too large, cannot create array buffer");
+        return new ArrayBuffer(0); // Return empty buffer
+      }
+
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      return bytes.buffer;
+    } catch (error) {
+      console.error("Error decoding base64 to array:", error);
+      return new ArrayBuffer(0); // Return empty buffer on error
     }
-    return bytes.buffer;
   }
 }

@@ -7,7 +7,7 @@ export function AutoPartsLogo() {
         xmlns="http://www.w3.org/2000/svg"
         className="h-10 w-10"
       >
-        <rect width="40" height="40" rx="10" fill="#0071E3" />
+        <rect width="40" height="40" rx="10" fill="#1A1A1A" />
         <path
           d="M20 10C14.4772 10 10 14.4772 10 20C10 25.5228 14.4772 30 20 30C25.5228 30 30 25.5228 30 20C30 14.4772 25.5228 10 20 10Z"
           stroke="white"
